@@ -1,0 +1,21 @@
+# Environment variables
+.env
+
+# SQLite database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude memory
+.claude/
