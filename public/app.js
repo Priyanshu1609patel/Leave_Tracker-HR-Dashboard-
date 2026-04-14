@@ -273,8 +273,9 @@ function renderLayout() {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   return `
-    <div class="app-layout">
-      <aside class="sidebar">
+    <div class="app-layout" id="app-layout">
+      <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+      <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
           <div class="sidebar-logo">
             <div class="sidebar-logo-icon">📅</div>
@@ -306,6 +307,9 @@ function renderLayout() {
       </aside>
       <div class="main-area">
         <header class="header">
+          <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+            <span></span><span></span><span></span>
+          </button>
           <div class="header-title" id="header-title">
             <h1>Dashboard</h1>
           </div>
@@ -321,9 +325,15 @@ function renderLayout() {
       </div>
     </div>`;
 }
+function toggleSidebar() {
+  document.getElementById('app-layout').classList.toggle('sidebar-open');
+}
+function closeSidebar() {
+  document.getElementById('app-layout').classList.remove('sidebar-open');
+}
 function bindNav() {
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
-    btn.addEventListener('click', () => navigate(btn.dataset.view));
+    btn.addEventListener('click', () => { closeSidebar(); navigate(btn.dataset.view); });
   });
   loadCheckinWidget();
 }

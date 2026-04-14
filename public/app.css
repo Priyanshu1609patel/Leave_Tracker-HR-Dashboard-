@@ -1089,3 +1089,177 @@ tr:hover td { background: var(--border-light); }
   font-size: .7rem;
   font-weight: 700;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — HAMBURGER & SIDEBAR DRAWER
+══════════════════════════════════════════════════════════════════════════════ */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.hamburger span {
+  display: block;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all .25s ease;
+}
+.hamburger:hover { background: var(--bg); }
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.5);
+  z-index: 499;
+  backdrop-filter: blur(2px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TABLET  ≤ 1024px
+══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  .header-date { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MOBILE  ≤ 768px
+══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Sidebar becomes a slide-in drawer */
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 500;
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    overflow-y: auto;
+    width: var(--sidebar-w);
+  }
+  .sidebar-open .sidebar { transform: translateX(0); }
+  .sidebar-open .sidebar-overlay { display: block; }
+
+  /* Main area takes full width */
+  .main-area { width: 100%; }
+
+  /* Show hamburger */
+  .hamburger { display: flex; }
+
+  /* Header */
+  .header { padding: 0 12px; gap: 8px; }
+  .header-title h1 { font-size: .95rem; }
+  .header-title p  { display: none; }
+  .header-date { display: none; }
+
+  /* Checkin widget — compact */
+  .checkin-status { display: none; }
+
+  /* Content padding */
+  .content-area { padding: 14px; }
+
+  /* Page header */
+  .page-header { margin-bottom: 14px; }
+  .page-title  { font-size: 1.15rem; }
+
+  /* Stats grid — 2 columns */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-card  { padding: 14px; }
+  .stat-value { font-size: 1.5rem; }
+
+  /* Dashboard grid */
+  .dashboard-grid { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Leaves layout */
+  .leaves-layout { grid-template-columns: 1fr; }
+
+  /* Settings grid */
+  .settings-grid { grid-template-columns: 1fr; }
+
+  /* Form row — stack */
+  .form-row { grid-template-columns: 1fr; }
+
+  /* Calendar toolbar */
+  .calendar-toolbar { gap: 8px; }
+  .calendar-title   { font-size: .9rem; min-width: 140px; }
+  .calendar-legend  { display: none; }
+
+  /* Month calendar cells */
+  .calendar-cell { min-height: 54px; padding: 4px; }
+  .cell-pill     { display: none; }
+  .cell-count    { font-size: .6rem; padding: 1px 3px; }
+
+  /* Week view — horizontal scroll */
+  .week-grid {
+    grid-template-columns: repeat(7, minmax(100px, 1fr));
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  /* Employees grid */
+  .employees-grid { grid-template-columns: 1fr; }
+
+  /* Leave cards */
+  .leave-card { flex-direction: column; gap: 10px; }
+  .leave-card-actions { flex-wrap: wrap; }
+
+  /* Tables — horizontal scroll */
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Modal */
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 92vh; }
+  .modal-body { padding: 16px; }
+  .modal-header { padding: 14px 16px; }
+  .modal-footer { padding: 12px 16px; flex-wrap: wrap; }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+
+  /* Toast */
+  #toast-container { bottom: 16px; right: 12px; left: 12px; }
+  .toast { max-width: 100%; }
+
+  /* Filter bar */
+  .filter-bar { gap: 8px; }
+  .filter-bar .form-control { flex: 1; min-width: 100px; }
+
+  /* Tab bar */
+  .tab-btn { padding: 7px 8px; font-size: .78rem; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SMALL MOBILE  ≤ 480px
+══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  html { font-size: 13px; }
+
+  /* Login */
+  .login-card { padding: 28px 20px; }
+
+  /* Stats — single column on tiny screens */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Calendar day header labels — single letter */
+  .calendar-day-header { font-size: .65rem; padding: 6px 0; }
+
+  /* Calendar cell — minimal */
+  .calendar-cell { min-height: 42px; padding: 3px; }
+  .cell-date     { font-size: .7rem; width: 20px; height: 20px; }
+
+  /* Page title */
+  .page-title { font-size: 1rem; }
+
+  /* Buttons */
+  .btn-lg { padding: 11px 18px; font-size: .9rem; }
+}
