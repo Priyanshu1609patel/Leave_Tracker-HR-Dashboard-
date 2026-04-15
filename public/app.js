@@ -816,7 +816,7 @@ function renderWeekView(weekDates) {
 // ── Day Modal ─────────────────────────────────────────────────────────────────
 function renderEmpRow(r, ds, showLive) {
   const st       = r.status || '';
-  const isLeave  = st === 'on_leave';
+  const isLeave  = st === 'on_leave' && !r.isHalfLeave;
   const userId   = r.user_id || r.id;
 
   return `
@@ -866,17 +866,31 @@ async function openDayModal(ds) {
     } catch { clockifyTimers = {}; }
   }
 
+  // For today: identify employees on half leave — they can still track Clockify
+  let halfLeaveIds = new Set();
+  if (isToday) {
+    try {
+      const allLeaves = await apiGet('/leaves');
+      halfLeaveIds = new Set(
+        allLeaves
+          .filter(l => l.leave_time === 'half' && l.status === 'approved'
+                    && l.start_date <= ds && l.end_date >= ds)
+          .map(l => l.user_id)
+      );
+    } catch { /* silent */ }
+  }
+
   // Build sets for accurate counting
   const onLeaveIds    = new Set(records.filter(r => r.status === 'on_leave').map(r => r.user_id));
   const dbPresentIds  = new Set(records.filter(r => ['present','half_day'].includes(r.status)).map(r => r.user_id));
   const absentIds     = new Set(records.filter(r => r.status === 'absent').map(r => r.user_id));
 
-  // Clockify-active employee IDs (not on leave)
+  // Clockify-active employee IDs (not on full leave — half leave is allowed)
   const cfyActiveIds = isToday
     ? new Set(Object.entries(clockifyTimers)
         .filter(([, t]) => t.running)
         .map(([uid]) => parseInt(uid))
-        .filter(id => !onLeaveIds.has(id)))
+        .filter(id => !onLeaveIds.has(id) || halfLeaveIds.has(id)))
     : new Set();
 
   const allPresentIds = new Set([...dbPresentIds, ...cfyActiveIds]);
@@ -889,7 +903,7 @@ async function openDayModal(ds) {
   if (isAdmin) {
     const merged = isWknd ? records : emps.map(emp => {
       const r = records.find(x => x.user_id === emp.id);
-      if (r) return { ...emp, ...r };
+      if (r) return { ...emp, ...r, isHalfLeave: halfLeaveIds.has(emp.id) };
       // For today: mark as present if Clockify timer is running
       if (isToday && cfyActiveIds.has(emp.id)) return { ...emp, status: 'present', no_record: true };
       return { ...emp, status: ds < todayStr() ? 'absent' : '', no_record: true };
@@ -909,7 +923,8 @@ async function openDayModal(ds) {
                <span class="status-badge absent">Absent</span>
              </div>`;
     } else {
-      empRows = renderEmpRow({ ...state.user, ...r, user_id: state.user.id }, ds, isToday && r.status !== 'on_leave');
+      const isHalfLeave = halfLeaveIds.has(state.user.id);
+      empRows = renderEmpRow({ ...state.user, ...r, user_id: state.user.id, isHalfLeave }, ds, isToday && (r.status !== 'on_leave' || isHalfLeave));
     }
   }
 
@@ -1145,54 +1160,6 @@ function renderLeavesView() {
       </div>
       <div>
         <div class="card">
-          <div class="card-header"><div class="card-title">Quick Apply</div></div>
-          <div class="card-body">
-            <form class="apply-leave-form" id="quick-leave-form" onsubmit="submitQuickLeave(event)">
-              ${isAdmin ? `
-              <div class="form-group">
-                <label class="form-label">Employee</label>
-                <select class="form-control" id="ql-emp" required>
-                  <option value="">Select employee…</option>
-                  ${state.employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('')}
-                </select>
-              </div>` : ''}
-              <div class="form-group">
-                <label class="form-label">Leave Type</label>
-                <select class="form-control" id="ql-type">${leaveTypeOpts}</select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Leave Time</label>
-                <select class="form-control" id="ql-leavetime" onchange="onQLLeaveTimeChange()">
-                  <option value="full">Full Leave</option>
-                  <option value="half">Half Leave</option>
-                </select>
-              </div>
-              <div class="form-group" id="ql-halftype-row" style="display:none">
-                <label class="form-label">Which Half?</label>
-                <select class="form-control" id="ql-halftype">
-                  <option value="first_half">First Half &nbsp;(Morning)</option>
-                  <option value="second_half">Second Half (Afternoon)</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Start Date</label>
-                  <input type="date" class="form-control" id="ql-start" min="${todayStr()}" required />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">End Date</label>
-                  <input type="date" class="form-control" id="ql-end" min="${todayStr()}" required />
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Reason</label>
-                <textarea class="form-control" id="ql-reason" rows="2" placeholder="Optional reason…"></textarea>
-              </div>
-              <button type="submit" class="btn btn-primary btn-full">Submit Request</button>
-            </form>
-          </div>
-        </div>
-        <div class="card" style="margin-top:16px">
           <div class="card-header"><div class="card-title">Leave Summary</div></div>
           <div class="card-body">
             ${renderLeaveSummary(myLeaves)}
@@ -1371,11 +1338,11 @@ function renderLeaveFormCard(index) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Start Date</label>
-          <input type="date" class="form-control" id="lf-start-${index}" min="${todayStr()}" required />
+          <input type="date" class="form-control" id="lf-start-${index}" required />
         </div>
         <div class="form-group">
           <label class="form-label">End Date</label>
-          <input type="date" class="form-control" id="lf-end-${index}" min="${todayStr()}" required />
+          <input type="date" class="form-control" id="lf-end-${index}" required />
         </div>
       </div>
       <div class="form-group" style="margin-bottom:0">
@@ -1585,7 +1552,7 @@ function openLateEarlyModal() {
       </div>
       <div class="form-group">
         <label class="form-label">Date <span style="color:var(--danger)">*</span></label>
-        <input type="date" class="form-control" id="le-date" value="${todayStr()}" max="${todayStr()}">
+        <input type="date" class="form-control" id="le-date" value="${todayStr()}">
       </div>
 
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">

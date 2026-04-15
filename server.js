@@ -516,7 +516,7 @@ app.put('/api/leaves/:id/approve', auth, adminOnly, async (req, res) => {
     const upserts = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const ds = d.toISOString().split('T')[0];
-      if (isWorkingDay(ds, settings)) upserts.push({ user_id: leave.user_id, date: ds, status: 'on_leave' });
+      if (isWorkingDay(ds, settings)) upserts.push({ user_id: leave.user_id, date: ds, status: leave.leave_time === 'half' ? 'half_day' : 'on_leave' });
     }
     if (upserts.length) await supabase.from('attendance').upsert(upserts, { onConflict: 'user_id,date' });
 
