@@ -12,6 +12,7 @@ const STATUS_COLOR = {
   absent:   '#EF4444',
   on_leave: '#F59E0B',
   half_day: '#3B82F6',
+  wfh:      '#06B6D4',
 };
 
 let state = {
@@ -27,7 +28,8 @@ let state = {
   dashboard:     {},
   todayRecord:   null,
   timer:         null,
-  leavesTab:        'all',  // 'all' | 'mine' | 'late_early' (admin)
+  leavesTab:        'all',  // 'all' | 'mine' | 'wfh' | 'late_early' (admin)
+  profileEmp:       null,
   lateEarlyRecords: [],
   leavesFilterDate: null,   // null = no filter; for late_early defaults to today
 };
@@ -111,7 +113,7 @@ function getWeekDates(date) {
 }
 function isWeekend(date) { const d = new Date(date); return d.getDay() === 0 || d.getDay() === 6; }
 function statusLabel(s) {
-  const map = { present:'Present', absent:'Absent', on_leave:'On Leave', half_day:'Half Day' };
+  const map = { present:'Present', absent:'Absent', on_leave:'On Leave', half_day:'Half Day', wfh:'WFH' };
   return map[s] || s || '—';
 }
 const I = k => window.ICONS[k] || '';
@@ -171,6 +173,29 @@ function logout() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// DARK MODE
+// ══════════════════════════════════════════════════════════════════════════════
+function initDarkMode() {
+  if (localStorage.getItem('lt_dark') === '1') {
+    document.body.classList.add('dark');
+  }
+  updateDarkModeIcon();
+}
+function toggleDarkMode() {
+  const isDark = document.body.classList.toggle('dark');
+  localStorage.setItem('lt_dark', isDark ? '1' : '0');
+  updateDarkModeIcon();
+}
+function updateDarkModeIcon() {
+  const isDark = document.body.classList.contains('dark');
+  const moon = document.getElementById('dark-icon-moon');
+  const sun  = document.getElementById('dark-icon-sun');
+  if (!moon || !sun) return;
+  moon.style.display = isDark ? 'block' : 'none';
+  sun.style.display  = isDark ? 'none'  : 'block';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // RENDER ENGINE
 // ══════════════════════════════════════════════════════════════════════════════
 function navigate(view) {
@@ -226,7 +251,12 @@ function renderLoginPage() {
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input class="form-control" type="password" id="login-password" value="admin123" required />
+            <div style="position:relative">
+              <input class="form-control" type="password" id="login-password" value="admin123" required style="padding-right:42px" />
+              <button type="button" id="toggle-password" onclick="(function(){var i=document.getElementById('login-password'),b=document.getElementById('toggle-password');if(i.type==='password'){i.type='text';b.innerHTML='<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'18\\' height=\\'18\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><path d=\\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24\\'></path><line x1=\\'1\\' y1=\\'1\\' x2=\\'23\\' y2=\\'23\\'></line></svg>';}else{i.type='password';b.innerHTML='<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'18\\' height=\\'18\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><path d=\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\'></path><circle cx=\\'12\\' cy=\\'12\\' r=\\'3\\'></circle></svg>';}})();" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#6B7280;display:flex;align-items:center;padding:0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
           </div>
           <div id="login-error" style="color:#EF4444;font-size:.83rem;margin-bottom:12px;display:none"></div>
           <button type="submit" class="btn btn-primary btn-full btn-lg" id="login-btn">
@@ -315,9 +345,10 @@ function renderLayout() {
           </div>
           <div class="header-spacer"></div>
           <div class="header-date">${dateStr}</div>
-          <div class="checkin-widget" id="checkin-widget">
-            <div class="loading"><div class="spinner"></div></div>
-          </div>
+          <button class="dark-mode-btn" id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">
+            <svg id="dark-icon-moon" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <svg id="dark-icon-sun" xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          </button>
         </header>
         <main class="content-area" id="content">
           <div class="loading"><div class="spinner"></div> Loading…</div>
@@ -335,7 +366,7 @@ function bindNav() {
   document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
     btn.addEventListener('click', () => { closeSidebar(); navigate(btn.dataset.view); });
   });
-  loadCheckinWidget();
+  updateDarkModeIcon();
 }
 function setHeaderTitle(title, sub = '') {
   document.getElementById('header-title').innerHTML = `<h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}`;
@@ -422,6 +453,8 @@ async function loadDashboard() {
   const content = document.getElementById('content');
   content.innerHTML = `<div class="loading"><div class="spinner"></div> Loading…</div>`;
   try {
+    // Clean orphaned attendance records on every dashboard load for real-time accuracy
+    await apiPost('/attendance/cleanup-orphaned', {}).catch(() => {});
     const data = await apiGet('/dashboard');
     state.dashboard = data;
     content.innerHTML = renderDashboard(data);
@@ -433,14 +466,15 @@ async function loadDashboard() {
 function renderDashboard(d) {
   const isAdmin = state.user.role === 'admin';
   const statCards = [
-    { label: 'Total Employees',  value: d.totalEmployees, icon: '👥', cls: 'primary' },
-    { label: 'Present Today',    value: d.presentToday,   icon: '✅', cls: 'success', hint: 'System check-in + Clockify live' },
-    { label: 'On Leave',         value: d.onLeaveToday,   icon: '🌴', cls: 'warning' },
-    { label: 'Not Checked In',   value: d.notCheckedIn,   icon: '🕐', cls: 'info'    },
-    { label: 'Absent (Explicit)',value: d.absentToday,    icon: '❌', cls: 'danger'  },
-    { label: 'Late Entries',     value: d.lateToday,      icon: '⏰', cls: 'orange'  },
-    { label: 'Early Exits',      value: d.earlyExitToday, icon: '◀',  cls: 'purple'  },
-    { label: 'Half Days',        value: d.halfDayToday,   icon: '🌓', cls: 'info'    },
+    { label: 'Total Employees', value: d.totalEmployees, icon: '👥', cls: 'primary' },
+    { label: 'Present Today',   value: d.presentToday,   icon: '✅', cls: 'success', hint: 'Total employees minus on leave' },
+    { label: 'On Leave',        value: d.onLeaveToday,   icon: '🌴', cls: 'warning' },
+    { label: 'WFH Today',       value: d.wfhToday,       icon: '🏠', cls: 'info'    },
+    { label: 'On Clockify',     value: d.onClockify,     icon: '⏱', cls: 'success'  },
+    { label: 'Not On Clockify', value: d.notOnClockify,  icon: '🕐', cls: 'danger'  },
+    { label: 'Late Entries',    value: d.lateToday,      icon: '⏰', cls: 'orange'   },
+    { label: 'Early Exits',     value: d.earlyExitToday, icon: '◀',  cls: 'purple'  },
+    { label: 'Half Days',       value: d.halfDayToday,   icon: '🌓', cls: 'info'    },
     ...(isAdmin ? [{ label: 'Pending Leaves', value: d.pendingLeaves, icon: '📋', cls: 'info' }] : []),
   ];
 
@@ -454,9 +488,10 @@ function renderDashboard(d) {
             <div class="activity-detail" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
               <span style="color:var(--text-muted)">${r.department || ''}</span>
               <span class="status-badge ${r.status}">${statusLabel(r.status)}</span>
+              ${r.status === 'half_day' ? '<span class="status-badge present">Present</span>' : ''}
+              ${r.status === 'wfh'      ? '<span class="status-badge present">Present</span>' : ''}
               ${r.is_late        ? '<span class="status-badge late">Late</span>'             : ''}
               ${r.is_early_exit  ? '<span class="status-badge early_exit">Early Exit</span>' : ''}
-              ${r.status === 'half_day' ? '<span class="status-badge half_day">Half Day</span>' : ''}
               ${r.clockify_live ? `<span class="clockify-badge" style="font-size:.65rem;padding:2px 6px">⏱ Clockify Live</span>` : ''}
             </div>
           </div>
@@ -589,6 +624,7 @@ function renderCalendarView() {
         <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Absent</div>
         <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> On Leave</div>
         <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> Half Day</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#06B6D4"></div> WFH</div>
         <div class="legend-item"><div class="legend-dot" style="background:#F97316"></div> Late</div>
         <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div> Early Exit</div>
       </div>
@@ -696,35 +732,23 @@ function renderMonthView() {
 }
 
 function renderAdminCellContent(ds, records) {
-  const isToday = ds === todayStr();
-  const onLeaveIds   = new Set(records.filter(r => r.status === 'on_leave').map(r => r.user_id));
-  const dbPresentIds = new Set(records.filter(r => ['present','half_day'].includes(r.status)).map(r => r.user_id));
-  const absent   = records.filter(r => r.status === 'absent').length;
-  const onLeave  = onLeaveIds.size;
-  const halfDay  = records.filter(r => r.status === 'half_day').length;
-  const late     = records.filter(r => r.is_late).length;
-  const early    = records.filter(r => r.is_early_exit).length;
+  if (ds > todayStr()) return '';
+  const totalEmps  = state.employees.length;
+  if (totalEmps === 0) return '';
+  // Absent = only employees on approved full leave
+  const absentCount = records.filter(r => r.status === 'on_leave').length;
+  // Present = everyone else (no record = assumed present)
+  const presentCount = totalEmps - absentCount;
+  const halfDay = records.filter(r => r.status === 'half_day').length;
+  const wfh     = records.filter(r => r.status === 'wfh').length;
+  const late    = records.filter(r => r.is_late).length;
+  const early   = records.filter(r => r.is_early_exit).length;
 
-  // For today, include Clockify-active employees not on leave
-  let presentCount;
-  if (isToday) {
-    const cfyActiveIds = new Set(
-      Object.entries(clockifyTimers)
-        .filter(([, t]) => t.running)
-        .map(([uid]) => parseInt(uid))
-        .filter(id => !onLeaveIds.has(id))
-    );
-    presentCount = new Set([...dbPresentIds, ...cfyActiveIds]).size;
-  } else {
-    presentCount = dbPresentIds.size;
-  }
-
-  if (presentCount === 0 && absent === 0 && onLeave === 0 && halfDay === 0) return '';
   const bits = [];
   if (presentCount > 0) bits.push(`<span class="cell-count p">${presentCount}P</span>`);
-  if (absent   > 0) bits.push(`<span class="cell-count a">${absent}A</span>`);
-  if (onLeave  > 0) bits.push(`<span class="cell-count l">${onLeave}L</span>`);
-  if (halfDay  > 0) bits.push(`<span class="cell-count h">${halfDay}H</span>`);
+  if (absentCount  > 0) bits.push(`<span class="cell-count a">${absentCount}A</span>`);
+  if (halfDay      > 0) bits.push(`<span class="cell-count h">${halfDay}H</span>`);
+  if (wfh          > 0) bits.push(`<span class="cell-count w">${wfh}W</span>`);
   const mods = [];
   if (late  > 0) mods.push(`<span class="cell-modifier-dot late">⏰${late}</span>`);
   if (early > 0) mods.push(`<span class="cell-modifier-dot early">◀${early}</span>`);
@@ -736,10 +760,7 @@ function renderAdminCellContent(ds, records) {
 function renderEmployeeCellContent(ds, records) {
   const myRecord = records.find(r => r.user_id === state.user.id);
   if (!myRecord) {
-    const today = todayStr();
-    if (ds < today && !isWeekend(ds)) {
-      return `<div class="cell-status-badge absent">Absent</div>`;
-    }
+    // Only show Absent if explicitly on approved leave; no record = present
     return '';
   }
   const mods = [];
@@ -774,7 +795,8 @@ function renderWeekView(weekDates) {
       } else {
         empRows = emps.map(emp => {
           const r = records.find(x => x.user_id === emp.id);
-          const status = r ? r.status : (ds < today ? 'absent' : '');
+          // No record = present by default; only on_leave = absent
+          const status = r ? r.status : (ds <= today ? 'present' : '');
           const color  = STATUS_COLOR[status] || '#CBD5E1';
           return `
             <div class="week-emp-item" style="background:${status?color+'15':'transparent'}">
@@ -787,7 +809,8 @@ function renderWeekView(weekDates) {
       }
     } else {
       const r = records.find(x => x.user_id === state.user.id);
-      const status = r ? r.status : (ds < today && !isWknd ? 'absent' : '');
+      // No record = present by default; only on_leave = absent
+      const status = r ? r.status : (ds <= today && !isWknd ? 'present' : '');
       const color = STATUS_COLOR[status] || '#CBD5E1';
       empRows = status ? `
         <div style="padding:10px;text-align:center">
@@ -816,7 +839,7 @@ function renderWeekView(weekDates) {
 // ── Day Modal ─────────────────────────────────────────────────────────────────
 function renderEmpRow(r, ds, showLive) {
   const st       = r.status || '';
-  const isLeave  = st === 'on_leave' && !r.isHalfLeave;
+  const isLeave  = st === 'on_leave';   // only full leave blocks Clockify; half_day → show Clockify
   const userId   = r.user_id || r.id;
 
   return `
@@ -835,13 +858,19 @@ function renderEmpRow(r, ds, showLive) {
           <div class="emp-detail-times" style="margin-top:4px">
             <div class="emp-detail-time-item">${I('clock')} In: <strong>${fmtTime(r.check_in)}</strong></div>
             <div class="emp-detail-time-item">Out: <strong>${fmtTime(r.check_out)}</strong></div>
-            ${r.work_hours ? `<div class="emp-detail-hours">${fmtHours(r.work_hours)}</div>` : ''}
           </div>` : ''}
 
         ${!isLeave && showLive ? `
           <div id="cfy-${userId}" style="margin-top:5px;display:flex;align-items:center;gap:6px">
             <span style="font-size:.72rem;color:var(--text-muted)">⏳ Fetching Clockify…</span>
           </div>` : ''}
+
+        ${!isLeave && !showLive ? `
+          <div style="margin-top:5px;display:inline-flex;align-items:center;gap:6px;background:var(--border-light);border-radius:6px;padding:3px 10px">
+            <span style="font-size:.8rem;font-weight:700;color:var(--primary);font-family:monospace">${r.cfy_hours ? fmtHours(r.cfy_hours) : (r.work_hours ? fmtHours(r.work_hours) : '—')}</span>
+            <span style="font-size:.68rem;color:var(--text-muted)">Clockify Total</span>
+          </div>` : ''}
+
         ${isLeave ? `
           <div style="margin-top:4px;font-size:.72rem;color:var(--warning);font-style:italic">On approved leave — no tracking</div>` : ''}
       </div>
@@ -857,7 +886,7 @@ async function openDayModal(ds) {
   const emps    = state.employees;
   const isToday = ds === todayStr();
 
-  // For today: fetch Clockify live data FIRST so stats & rows are accurate
+  // For today: fetch Clockify live data
   if (isToday) {
     stopClockifyLive();
     try {
@@ -866,53 +895,37 @@ async function openDayModal(ds) {
     } catch { clockifyTimers = {}; }
   }
 
-  // For today: identify employees on half leave — they can still track Clockify
-  let halfLeaveIds = new Set();
-  if (isToday) {
+  // For past dates: fetch Clockify day totals (actual tracked hours per employee)
+  let clockifyDayHours = {};
+  if (!isToday && ds < todayStr()) {
     try {
-      const allLeaves = await apiGet('/leaves');
-      halfLeaveIds = new Set(
-        allLeaves
-          .filter(l => l.leave_time === 'half' && l.status === 'approved'
-                    && l.start_date <= ds && l.end_date >= ds)
-          .map(l => l.user_id)
-      );
-    } catch { /* silent */ }
+      const { hours } = await apiGet('/clockify/day', { date: ds });
+      clockifyDayHours = hours || {};
+    } catch { /* silent — show — if unavailable */ }
   }
 
-  // Build sets for accurate counting
-  const onLeaveIds    = new Set(records.filter(r => r.status === 'on_leave').map(r => r.user_id));
-  const dbPresentIds  = new Set(records.filter(r => ['present','half_day'].includes(r.status)).map(r => r.user_id));
-  const absentIds     = new Set(records.filter(r => r.status === 'absent').map(r => r.user_id));
-
-  // Clockify-active employee IDs (not on full leave — half leave is allowed)
-  const cfyActiveIds = isToday
-    ? new Set(Object.entries(clockifyTimers)
-        .filter(([, t]) => t.running)
-        .map(([uid]) => parseInt(uid))
-        .filter(id => !onLeaveIds.has(id) || halfLeaveIds.has(id)))
-    : new Set();
-
-  const allPresentIds = new Set([...dbPresentIds, ...cfyActiveIds]);
-  const present = allPresentIds.size;
-  const onLeave = onLeaveIds.size;
-  const absent  = absentIds.size;
-  const late    = records.filter(r => r.is_late).length;
+  // Absent = only employees on full leave (on_leave); half_day/wfh = still present + can track Clockify
+  const onLeaveIds = new Set(records.filter(r => r.status === 'on_leave').map(r => r.user_id));
+  const totalEmps = emps.length;
+  const onLeave   = onLeaveIds.size;
+  const present   = totalEmps - onLeave;
+  const absent    = onLeave;
+  const late      = records.filter(r => r.is_late).length;
 
   let empRows = '';
   if (isAdmin) {
     const merged = isWknd ? records : emps.map(emp => {
       const r = records.find(x => x.user_id === emp.id);
-      if (r) return { ...emp, ...r, isHalfLeave: halfLeaveIds.has(emp.id) };
-      // For today: mark as present if Clockify timer is running
-      if (isToday && cfyActiveIds.has(emp.id)) return { ...emp, status: 'present', no_record: true };
-      return { ...emp, status: ds < todayStr() ? 'absent' : '', no_record: true };
+      const cfy_hours = clockifyDayHours[emp.id] || 0;
+      if (r) return { ...emp, ...r, cfy_hours };
+      return { ...emp, status: ds <= todayStr() ? 'present' : '', no_record: true, cfy_hours };
     });
     empRows = merged.length === 0
       ? `<div class="empty-state"><div class="empty-icon">📭</div><p>No records for this day</p></div>`
       : merged.map(r => renderEmpRow(r, ds, isToday)).join('');
   } else {
     const r = records.find(x => x.user_id === state.user.id);
+    const cfy_hours = clockifyDayHours[state.user.id] || 0;
     if (!r) {
       empRows = ds > todayStr()
         ? `<div class="empty-state"><div class="empty-icon">📅</div><p>Future date — no record yet</p></div>`
@@ -920,11 +933,11 @@ async function openDayModal(ds) {
           ? `<div class="empty-state"><div class="empty-icon">🏖️</div><p>Weekend</p></div>`
           : `<div class="employee-detail-item">
                <div class="emp-detail-info"><div class="emp-detail-name">${state.user.name}</div></div>
-               <span class="status-badge absent">Absent</span>
+               <span class="status-badge present">Present</span>
              </div>`;
     } else {
-      const isHalfLeave = halfLeaveIds.has(state.user.id);
-      empRows = renderEmpRow({ ...state.user, ...r, user_id: state.user.id, isHalfLeave }, ds, isToday && (r.status !== 'on_leave' || isHalfLeave));
+      // showLive = true for today unless on full leave
+      empRows = renderEmpRow({ ...state.user, ...r, user_id: state.user.id, cfy_hours }, ds, isToday && r.status !== 'on_leave');
     }
   }
 
@@ -1094,6 +1107,7 @@ function renderLeavesView() {
   const fd = state.leavesFilterDate;
   const filteredLeaveItems = (() => {
     let src = isAdmin && state.leavesTab === 'all' ? allLeaves : myLeaves;
+    src = src.filter(l => l.leave_time !== 'wfh');
     if (fd) src = src.filter(l => l.start_date <= fd && l.end_date >= fd);
     if (!src.length) return `<div class="empty-state"><div class="empty-icon">📭</div><p>No leave records for this date</p></div>`;
     return src.map(l => `
@@ -1105,7 +1119,9 @@ function renderLeavesView() {
             <span class="leave-type-badge ${l.leave_type}">${l.leave_type}</span>
             ${l.leave_time === 'half'
               ? `<span style="font-size:.7rem;font-weight:600;padding:2px 7px;border-radius:99px;background:#EDE9FE;color:#7C3AED">${l.half_type === 'second_half' ? '🌙 Second Half' : '☀️ First Half'}</span>`
-              : `<span style="font-size:.7rem;font-weight:600;padding:2px 7px;border-radius:99px;background:#F1F5F9;color:#475569">Full Day</span>`}
+              : l.leave_time === 'wfh'
+                ? `<span class="status-badge wfh" style="font-size:.7rem">🏠 WFH</span>`
+                : `<span style="font-size:.7rem;font-weight:600;padding:2px 7px;border-radius:99px;background:#F1F5F9;color:#475569">Full Day</span>`}
             <span class="status-badge ${l.status}">${l.status}</span>
           </div>
           <div class="leave-card-dates">${I('calendar')} ${fmtDateRange(l.start_date, l.end_date)}</div>
@@ -1125,7 +1141,39 @@ function renderLeavesView() {
       </div>`).join('');
   })();
 
-  const activeListItems = state.leavesTab === 'late_early' ? leItems : filteredLeaveItems;
+  // WFH tab — filter all leaves where leave_time === 'wfh'
+  const allLeavesList = isAdmin ? state.leaves : myLeaves;
+  const wfhItems = (() => {
+    const src = allLeavesList.filter(l => l.leave_time === 'wfh');
+    if (!src.length) return `<div class="empty-state"><div class="empty-icon">🏠</div><p>No WFH records</p></div>`;
+    return src.map(l => `
+      <div class="leave-card">
+        <div style="width:36px;height:36px;border-radius:50%;background:${l.avatar_color||'#06B6D4'};display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;color:#fff;flex-shrink:0">${initials(l.name)}</div>
+        <div class="leave-card-left">
+          <div class="flex items-center gap-2" style="flex-wrap:wrap">
+            <div class="leave-card-name">${l.name}</div>
+            <span class="leave-type-badge ${l.leave_type}">${l.leave_type}</span>
+            <span class="status-badge wfh" style="font-size:.7rem">🏠 WFH</span>
+            <span class="status-badge ${l.status}">${l.status}</span>
+          </div>
+          <div class="leave-card-dates">${I('calendar')} ${fmtDateRange(l.start_date, l.end_date)}</div>
+          ${l.reason ? `<div class="leave-card-reason">"${l.reason}"</div>` : ''}
+          ${l.approver_name ? `<div class="text-sm text-muted" style="margin-top:2px">By: ${l.approver_name}</div>` : ''}
+          <div class="leave-card-actions">
+            ${isAdmin && l.status === 'pending' ? `
+              <button class="btn btn-success btn-sm" onclick="approveLeave(${l.id})">${I('check')} Approve</button>
+              <button class="btn btn-danger btn-sm"  onclick="rejectLeave(${l.id})">${I('x')} Reject</button>` : ''}
+            ${l.status === 'pending' && l.user_id === state.user.id ? `
+              <button class="btn btn-outline btn-sm" onclick="cancelLeave(${l.id})">${I('x')} Cancel</button>` : ''}
+          </div>
+        </div>
+        <div style="flex-shrink:0;align-self:center">
+          <span class="btn btn-outline btn-sm" style="cursor:pointer" onclick='openEditLeaveModal(${JSON.stringify(l)})'>${I('edit')} Edit</span>
+        </div>
+      </div>`).join('');
+  })();
+
+  const activeListItems = state.leavesTab === 'late_early' ? leItems : state.leavesTab === 'wfh' ? wfhItems : filteredLeaveItems;
 
   const filterLabel = state.leavesTab === 'late_early'
     ? 'Filter by Date'
@@ -1152,6 +1200,7 @@ function renderLeavesView() {
             All Leaves ${pendingCount ? `<span class="nav-badge" style="position:static;margin-left:4px">${pendingCount}</span>` : ''}
           </button>` : ''}
           <button class="tab-btn ${state.leavesTab==='mine'?'active':''}" onclick="setLeavesTab('mine')">My Leaves</button>
+          <button class="tab-btn ${state.leavesTab==='wfh'?'active':''}" onclick="setLeavesTab('wfh')">🏠 Work From Home</button>
           <button class="tab-btn ${state.leavesTab==='late_early'?'active':''}" onclick="setLeavesTab('late_early')">
             ⏰ Late / Early Exit ${leRecords.length ? `<span class="nav-badge" style="position:static;margin-left:4px">${leRecords.length}</span>` : ''}
           </button>
@@ -1236,33 +1285,37 @@ async function submitQuickLeave(e) {
     btn.disabled = false;
   }
 }
+async function refreshAfterLeaveChange() {
+  // Clean up any orphaned attendance records (stale wfh/on_leave/half_day with no approved leave)
+  await apiPost('/attendance/cleanup-orphaned', {}).catch(() => {});
+  const leaves = await apiGet('/leaves');
+  state.leaves = leaves;
+  if (state.view === 'leaves') renderLeavesView();
+  if (state.view === 'dashboard') loadDashboard();
+  if (state.view === 'calendar') loadCalendar();
+  // Always refresh dashboard stats and calendar data in background for real-time accuracy
+  if (state.view !== 'dashboard') loadDashboard().catch(() => {});
+  if (state.view !== 'calendar') loadCalendar().catch(() => {});
+}
 async function approveLeave(id) {
   try {
     await apiPut(`/leaves/${id}/approve`, {});
     toast('Leave approved', 'success');
-    const leaves = await apiGet('/leaves');
-    state.leaves = leaves;
-    if (state.view === 'leaves') renderLeavesView();
-    if (state.view === 'dashboard') loadDashboard();
+    await refreshAfterLeaveChange();
   } catch (err) { toast(err.message, 'error'); }
 }
 async function rejectLeave(id) {
   try {
     await apiPut(`/leaves/${id}/reject`, {});
     toast('Leave rejected', 'warning');
-    const leaves = await apiGet('/leaves');
-    state.leaves = leaves;
-    if (state.view === 'leaves') renderLeavesView();
-    if (state.view === 'dashboard') loadDashboard();
+    await refreshAfterLeaveChange();
   } catch (err) { toast(err.message, 'error'); }
 }
 async function cancelLeave(id) {
   try {
     await apiDelete(`/leaves/${id}`);
     toast('Leave cancelled', 'info');
-    const leaves = await apiGet('/leaves');
-    state.leaves = leaves;
-    renderLeavesView();
+    await refreshAfterLeaveChange();
   } catch (err) { toast(err.message, 'error'); }
 }
 async function deleteLeave(id) {
@@ -1271,9 +1324,7 @@ async function deleteLeave(id) {
     await apiDelete(`/leaves/${id}`);
     toast('Leave deleted', 'success');
     closeModal();
-    const leaves = await apiGet('/leaves');
-    state.leaves = leaves;
-    renderLeavesView();
+    await refreshAfterLeaveChange();
   } catch (err) { toast(err.message, 'error'); }
 }
 function onLeaveTimeChange(index) {
@@ -1325,6 +1376,7 @@ function renderLeaveFormCard(index) {
           <select class="form-control" id="lf-leavetime-${index}" onchange="onLeaveTimeChange(${index})">
             <option value="full">Full Leave</option>
             <option value="half">Half Leave</option>
+            <option value="wfh">Work from Home</option>
           </select>
         </div>
       </div>
@@ -1468,8 +1520,9 @@ function openEditLeaveModal(l) {
       <div class="form-group">
         <label class="form-label">Leave Time</label>
         <select class="form-control" id="el-leavetime" onchange="onEditLeaveTimeChange()" ${!canEdit?'disabled':''}>
-          <option value="full" ${l.leave_time!=='half'?'selected':''}>Full Leave</option>
+          <option value="full" ${l.leave_time==='full'?'selected':''}>Full Leave</option>
           <option value="half" ${l.leave_time==='half'?'selected':''}>Half Leave</option>
+          <option value="wfh"  ${l.leave_time==='wfh'?'selected':''}>Work from Home</option>
         </select>
       </div>
       <div class="form-group" id="el-halftype-row" style="display:${l.leave_time==='half'?'block':'none'}">
@@ -1754,26 +1807,132 @@ function renderEmployeesView(users) {
     </div>
     <div class="employees-grid">
       ${users.map(u => `
-        <div class="employee-card">
+        <div class="employee-card" ${u.role !== 'admin' ? `onclick="openEmployeeProfile(${u.id})" style="cursor:pointer"` : ''}>
           <div class="employee-card-header">
             <div class="employee-avatar-lg" style="background:${u.avatar_color||'#4F46E5'}">${initials(u.name)}</div>
             <div>
               <div class="employee-name">${u.name}</div>
-              <div class="employee-position">${u.position}</div>
+              <div class="employee-position">${u.position || ''}</div>
               <span class="employee-role-badge ${u.role}">${u.role}</span>
             </div>
           </div>
           <div>
-            <div class="employee-dept">🏢 ${u.department}</div>
+            <div class="employee-dept">🏢 ${u.department || ''}</div>
             <div class="employee-email">✉ ${u.email}</div>
           </div>
-          <div class="employee-card-actions">
+          <div class="employee-card-actions" onclick="event.stopPropagation()">
             <button class="btn btn-outline btn-sm" onclick='openEditEmployeeModal(${JSON.stringify(u)})'>${I('edit')} Edit</button>
             ${u.id !== state.user.id ? `<button class="btn btn-danger btn-sm" onclick="deleteEmployee(${u.id},'${u.name}')">${I('trash')}</button>` : ''}
           </div>
         </div>`).join('')}
     </div>`;
 }
+// ── Employee Profile ──────────────────────────────────────────────────────────
+async function openEmployeeProfile(empId) {
+  const allUsers = state.employees.length ? state.employees : await apiGet('/employees');
+  const emp = allUsers.find(u => u.id === empId) || (await apiGet('/employees')).find(u => u.id === empId);
+  if (!emp) return;
+  state.profileEmp = emp;
+  const now = new Date();
+  await renderEmployeeProfile(now.getFullYear(), now.getMonth() + 1);
+}
+
+async function renderEmployeeProfile(year, month) {
+  const emp = state.profileEmp;
+  const content = document.getElementById('content');
+  setHeaderTitle(emp.name, (emp.position || '') + (emp.department ? ' · ' + emp.department : ''));
+  content.innerHTML = `<div class="loading"><div class="spinner"></div> Loading…</div>`;
+  try {
+    const [attendance, leaves] = await Promise.all([
+      apiGet('/attendance', { year, month, userId: emp.id }),
+      apiGet('/leaves', { userId: emp.id, year, month }),
+    ]);
+
+    const workingDays  = countWorkingDays(year, month);
+    // Use approved leaves as source of truth for leave-based stats
+    const approvedLeaves = leaves.filter(l => l.status === 'approved');
+    const onLeaveCount = approvedLeaves.filter(l => l.leave_time === 'full').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
+    const halfDayCount = approvedLeaves.filter(l => l.leave_time === 'half').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
+    const wfhCount     = approvedLeaves.filter(l => l.leave_time === 'wfh').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
+    const lateCount    = attendance.filter(r => r.is_late).length;
+    const presentCount = Math.max(0, workingDays - onLeaveCount);
+    const monthValue   = `${year}-${String(month).padStart(2,'0')}`;
+
+    const leaveCards = leaves.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🎉</div><p>No leave records for ${MONTHS[month-1]} ${year}</p></div>`
+      : leaves.map(l => `
+        <div class="leave-card">
+          <div style="width:36px;height:36px;border-radius:50%;background:${emp.avatar_color||'#4F46E5'};display:flex;align-items:center;justify-content:center;font-size:.82rem;font-weight:700;color:#fff;flex-shrink:0">${initials(emp.name)}</div>
+          <div class="leave-card-left">
+            <div class="flex items-center gap-2" style="flex-wrap:wrap">
+              <div class="leave-card-name">${emp.name}</div>
+              <span class="leave-type-badge ${l.leave_type}">${l.leave_type}</span>
+              ${l.leave_time === 'half'
+                ? `<span style="font-size:.7rem;font-weight:600;padding:2px 7px;border-radius:99px;background:#EDE9FE;color:#7C3AED">${l.half_type === 'second_half' ? '🌙 Second Half' : '☀️ First Half'}</span>`
+                : l.leave_time === 'wfh'
+                  ? `<span class="status-badge wfh" style="font-size:.7rem">🏠 WFH</span>`
+                  : `<span style="font-size:.7rem;font-weight:600;padding:2px 7px;border-radius:99px;background:#F1F5F9;color:#475569">Full Day</span>`}
+              <span class="status-badge ${l.status}">${l.status}</span>
+            </div>
+            <div class="leave-card-dates">${I('calendar')} ${fmtDateRange(l.start_date, l.end_date)}</div>
+            ${l.reason ? `<div class="leave-card-reason">"${l.reason}"</div>` : ''}
+            ${l.approver_name ? `<div class="text-sm text-muted" style="margin-top:2px">By: ${l.approver_name}</div>` : ''}
+          </div>
+        </div>`).join('');
+
+    content.innerHTML = `
+      <div class="page-header">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="loadEmployees()">${I('chevronLeft')} Back</button>
+          <div class="employee-avatar-lg" style="background:${emp.avatar_color||'#4F46E5'};width:48px;height:48px;font-size:1.1rem">${initials(emp.name)}</div>
+          <div>
+            <div class="page-title" style="margin:0">${emp.name}</div>
+            <div class="page-subtitle">${emp.position || ''} ${emp.department ? '· ' + emp.department : ''}</div>
+          </div>
+        </div>
+        <input type="month" class="form-control" style="width:auto"
+          value="${monthValue}" onchange="renderEmployeeProfile(...this.value.split('-').map(Number))">
+      </div>
+
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card success"><div class="stat-icon">✅</div><div class="stat-value">${presentCount}</div><div class="stat-label">Present Days</div></div>
+        <div class="stat-card danger"><div class="stat-icon">🌴</div><div class="stat-value">${onLeaveCount}</div><div class="stat-label">Leave Days</div></div>
+        <div class="stat-card info"><div class="stat-icon">🌓</div><div class="stat-value">${halfDayCount}</div><div class="stat-label">Half Days</div></div>
+        <div class="stat-card" style="border-top:3px solid #06B6D4"><div class="stat-icon" style="background:#CFFAFE;color:#0E7490">🏠</div><div class="stat-value">${wfhCount}</div><div class="stat-label">WFH Days</div></div>
+        <div class="stat-card orange"><div class="stat-icon">⏰</div><div class="stat-value">${lateCount}</div><div class="stat-label">Late Entries</div></div>
+      </div>
+
+      <div class="section-title">Leave Records — ${MONTHS[month-1]} ${year}</div>
+      <div class="leave-list">${leaveCards}</div>`;
+  } catch (err) {
+    content.innerHTML = `<div class="empty-state"><p>Failed to load profile: ${err.message}</p></div>`;
+  }
+}
+
+function countWorkingDays(year, month) {
+  let count = 0;
+  const days = new Date(year, month, 0).getDate();
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+// Count working days (Mon–Fri) a leave covers within the given year/month
+function countLeaveDaysInMonth(leave, year, month) {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd   = new Date(year, month, 0);
+  const start = new Date(Math.max(new Date(leave.start_date + 'T12:00:00'), monthStart));
+  const end   = new Date(Math.min(new Date(leave.end_date   + 'T12:00:00'), monthEnd));
+  let count = 0;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 function openAddEmployeeModal() {
   const colors = ['#4F46E5','#10B981','#F59E0B','#EF4444','#8B5CF6','#F97316','#06B6D4','#EC4899'];
   openModal(`
@@ -2170,6 +2329,8 @@ window.approveLeave       = approveLeave;
 window.rejectLeave        = rejectLeave;
 window.cancelLeave        = cancelLeave;
 window.openAddEmployeeModal  = openAddEmployeeModal;
+window.openEmployeeProfile   = openEmployeeProfile;
+window.renderEmployeeProfile = renderEmployeeProfile;
 window.submitAddEmployee     = submitAddEmployee;
 window.openEditEmployeeModal = openEditEmployeeModal;
 window.submitEditEmployee    = submitEditEmployee;
@@ -2178,6 +2339,8 @@ window.saveScheduleSettings  = saveScheduleSettings;
 window.saveClockifySettings  = saveClockifySettings;
 window.testClockifyConnection = testClockifyConnection;
 window.syncClockifyToday     = syncClockifyToday;
+window.toggleDarkMode        = toggleDarkMode;
 
 // Boot
+initDarkMode();
 init();

@@ -113,30 +113,26 @@ app.get('/api/dashboard', auth, async (req, res) => {
       }
     } catch { /* Clockify unavailable — degrade gracefully */ }
 
-    // ── 4. Calculate stats accurately ────────────────────────────────────────
+    // ── 4. Calculate stats ────────────────────────────────────────────────────
     const onLeaveIds   = new Set(todayRecords.filter(r => r.status === 'on_leave').map(r => r.user_id));
-    const absentIds    = new Set(todayRecords.filter(r => r.status === 'absent').map(r => r.user_id));
-    const sysCheckedIn = new Set(todayRecords.filter(r => r.check_in).map(r => r.user_id));
-
-    // Present = checked in via system OR actively tracking on Clockify (and not on leave / absent)
-    const presentIds   = new Set([
-      ...sysCheckedIn,
-      ...[...clockifyActiveIds].filter(id => !onLeaveIds.has(id) && !absentIds.has(id))
-    ]);
-    const presentToday  = presentIds.size;
     const onLeaveToday  = onLeaveIds.size;
-    const absentToday   = absentIds.size;   // only explicitly marked absent
+    // Present = everyone not on full leave (same logic as calendar)
+    const presentToday  = Math.max(0, totalEmployees - onLeaveToday);
+    // On Clockify = employees with active timer who are not on leave
+    const onClockify    = [...clockifyActiveIds].filter(id => !onLeaveIds.has(id)).length;
+    // Not On Clockify = present but no Clockify timer running
+    const notOnClockify = Math.max(0, presentToday - onClockify);
     const lateToday      = todayRecords.filter(r => r.is_late).length;
     const earlyExitToday = todayRecords.filter(r => r.is_early_exit).length;
     const halfDayToday   = todayRecords.filter(r => r.status === 'half_day').length;
-    const notCheckedIn  = Math.max(0, totalEmployees - presentToday - onLeaveToday - absentToday);
+    const wfhToday       = todayRecords.filter(r => r.status === 'wfh').length;
 
-    // ── 5. Recent activity — deduplicate by user_id, merge clockify_live flag ──
+    // ── 5. Recent activity — employees with actual records today ──────────────
     const activityMap = new Map();
     for (const r of todayRecords) {
       activityMap.set(r.user_id, { ...r, clockify_live: clockifyActiveIds.has(r.user_id) });
     }
-    // Add Clockify-only employees (no system record yet)
+    // Add Clockify-only employees (no system record yet, not on leave)
     for (const id of clockifyActiveIds) {
       if (!activityMap.has(id) && !onLeaveIds.has(id)) {
         const emp = allEmployees.find(e => e.id === id);
@@ -165,7 +161,7 @@ app.get('/api/dashboard', auth, async (req, res) => {
     const { data: myToday } = await supabase.from('attendance')
       .select('*').eq('user_id', req.user.id).eq('date', today).maybeSingle();
 
-    res.json({ totalEmployees, presentToday, onLeaveToday, absentToday, notCheckedIn, lateToday, earlyExitToday, halfDayToday, pendingLeaves, recentActivity, pendingLeaveList, myToday, today });
+    res.json({ totalEmployees, presentToday, onLeaveToday, onClockify, notOnClockify, lateToday, earlyExitToday, halfDayToday, wfhToday, pendingLeaves, recentActivity, pendingLeaveList, myToday, today });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -436,11 +432,20 @@ app.delete('/api/attendance/late-early/:id', auth, adminOnly, async (req, res) =
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 app.get('/api/leaves', auth, async (req, res) => {
   try {
+    const { userId, year, month } = req.query;
     let query = supabase.from('leaves')
       .select('*, users!leaves_user_id_fkey(name, email, avatar_color, department), approver:users!leaves_approved_by_fkey(name)')
       .order('created_at', { ascending: false });
 
-    if (req.user.role !== 'admin') query = query.eq('user_id', req.user.id);
+    if (req.user.role !== 'admin') {
+      query = query.eq('user_id', req.user.id);
+    } else if (userId) {
+      query = query.eq('user_id', parseInt(userId));
+    }
+    if (year && month) {
+      const ym = `${year}-${String(month).padStart(2,'0')}`;
+      query = query.lte('start_date', `${ym}-31`).gte('end_date', `${ym}-01`);
+    }
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -516,7 +521,7 @@ app.put('/api/leaves/:id/approve', auth, adminOnly, async (req, res) => {
     const upserts = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const ds = d.toISOString().split('T')[0];
-      if (isWorkingDay(ds, settings)) upserts.push({ user_id: leave.user_id, date: ds, status: leave.leave_time === 'half' ? 'half_day' : 'on_leave' });
+      if (isWorkingDay(ds, settings)) upserts.push({ user_id: leave.user_id, date: ds, status: leave.leave_time === 'half' ? 'half_day' : leave.leave_time === 'wfh' ? 'wfh' : 'on_leave' });
     }
     if (upserts.length) await supabase.from('attendance').upsert(upserts, { onConflict: 'user_id,date' });
 
@@ -533,12 +538,60 @@ app.put('/api/leaves/:id/reject', auth, adminOnly, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Clean up attendance records with leave-based status but no approved leave backing them
+app.post('/api/attendance/cleanup-orphaned', auth, async (req, res) => {
+  try {
+    const { data: leaveAttendance } = await supabase.from('attendance')
+      .select('id, user_id, date, status')
+      .in('status', ['on_leave', 'half_day', 'wfh']);
+
+    if (!leaveAttendance?.length) return res.json({ removed: 0 });
+
+    const { data: approvedLeaves } = await supabase.from('leaves')
+      .select('user_id, start_date, end_date, leave_time')
+      .eq('status', 'approved');
+
+    const toDelete = [];
+    for (const att of leaveAttendance) {
+      const hasLeave = (approvedLeaves || []).some(l => {
+        if (l.user_id !== att.user_id) return false;
+        if (att.date < l.start_date || att.date > l.end_date) return false;
+        const expected = l.leave_time === 'half' ? 'half_day' : l.leave_time === 'wfh' ? 'wfh' : 'on_leave';
+        return att.status === expected;
+      });
+      if (!hasLeave) toDelete.push(att.id);
+    }
+
+    if (toDelete.length) await supabase.from('attendance').delete().in('id', toDelete);
+    res.json({ removed: toDelete.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/leaves/:id', auth, async (req, res) => {
   try {
     const { data: leave } = await supabase.from('leaves').select('*').eq('id', req.params.id).maybeSingle();
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
     if (req.user.role !== 'admin' && leave.user_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
     if (leave.status === 'approved' && req.user.role !== 'admin') return res.status(400).json({ error: 'Cannot cancel approved leave' });
+
+    // If leave was approved, remove the attendance records that were created for those dates
+    if (leave.status === 'approved') {
+      const settings = await getSettings();
+      const start = new Date(leave.start_date + 'T12:00:00');
+      const end   = new Date(leave.end_date   + 'T12:00:00');
+      const dates = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const ds = d.toISOString().split('T')[0];
+        if (isWorkingDay(ds, settings)) dates.push(ds);
+      }
+      if (dates.length) {
+        await supabase.from('attendance')
+          .delete()
+          .eq('user_id', leave.user_id)
+          .in('date', dates);
+      }
+    }
+
     await supabase.from('leaves').delete().eq('id', req.params.id);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -613,6 +666,40 @@ app.get('/api/clockify/live', auth, async (req, res) => {
 
     res.json({ timers });
   } catch (err) { res.json({ timers: {} }); }
+});
+
+// Fetch total hours per employee for a specific past date directly from Clockify
+app.get('/api/clockify/day', auth, async (req, res) => {
+  try {
+    const { data: config } = await supabase.from('clockify_config').select('*').limit(1).maybeSingle();
+    if (!config?.api_key || !config?.workspace_id) return res.json({ hours: {} });
+
+    const date     = req.query.date || new Date().toISOString().split('T')[0];
+    const startISO = date + 'T00:00:00Z';
+    const endISO   = date + 'T23:59:59Z';
+
+    const { data: employees } = await supabase.from('users')
+      .select('id, clockify_user_id').eq('role', 'employee');
+
+    const hours = {};
+    await Promise.all((employees || []).filter(e => e.clockify_user_id).map(async emp => {
+      try {
+        const resp = await axios.get(
+          `https://api.clockify.me/api/v1/workspaces/${config.workspace_id}/user/${emp.clockify_user_id}/time-entries`,
+          { headers: { 'X-Api-Key': config.api_key }, params: { start: startISO, end: endISO, 'page-size': 50 } }
+        );
+        const entries = resp.data || [];
+        let totalSeconds = 0;
+        for (const e of entries) {
+          const m = (e.timeInterval?.duration || '').match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+          if (m) totalSeconds += (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+        }
+        if (totalSeconds > 0) hours[emp.id] = Math.round((totalSeconds / 3600) * 100) / 100;
+      } catch { /* individual failure ok */ }
+    }));
+
+    res.json({ hours });
+  } catch (err) { res.json({ hours: {} }); }
 });
 
 app.post('/api/clockify/sync', auth, adminOnly, async (req, res) => {

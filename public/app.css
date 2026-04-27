@@ -702,6 +702,7 @@ a { text-decoration: none; color: inherit; }
 .cell-count.a { background: var(--danger-light);  color: #DC2626; }
 .cell-count.l { background: var(--warning-light); color: #D97706; }
 .cell-count.h { background: var(--info-light);    color: #2563EB; }
+.cell-count.w { background: #CFFAFE;              color: #0E7490; }
 
 /* Week View */
 .week-grid {
@@ -808,6 +809,7 @@ a { text-decoration: none; color: inherit; }
 .status-badge.half_day { background: var(--info-light);    color: #2563EB; }
 .status-badge.late     { background: var(--orange-light);  color: var(--orange); }
 .status-badge.early_exit { background: var(--purple-light); color: var(--purple); }
+.status-badge.wfh        { background: #CFFAFE; color: #0E7490; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    EMPLOYEES PAGE
@@ -1237,6 +1239,88 @@ tr:hover td { background: var(--border-light); }
   /* Tab bar */
   .tab-btn { padding: 7px 8px; font-size: .78rem; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   DARK MODE
+══════════════════════════════════════════════════════════════════════════════ */
+body.dark {
+  --bg:            #0D1117;
+  --card-bg:       #161B22;
+  --text:          #E6EDF3;
+  --text-muted:    #8B949E;
+  --text-light:    #484F58;
+  --border:        #30363D;
+  --border-light:  #21262D;
+  --primary-light: rgba(79,70,229,.18);
+  --success-light: rgba(16,185,129,.15);
+  --danger-light:  rgba(239,68,68,.15);
+  --warning-light: rgba(245,158,11,.15);
+  --info-light:    rgba(59,130,246,.15);
+  --orange-light:  rgba(249,115,22,.15);
+  --purple-light:  rgba(139,92,246,.15);
+  --shadow:        0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  --shadow-md:     0 4px 6px rgba(0,0,0,.4), 0 2px 4px rgba(0,0,0,.3);
+  --shadow-lg:     0 10px 25px rgba(0,0,0,.5), 0 4px 10px rgba(0,0,0,.3);
+  --shadow-xl:     0 20px 40px rgba(0,0,0,.6);
+}
+/* Scrollbar */
+body.dark ::-webkit-scrollbar-thumb { background: #30363D; }
+body.dark ::-webkit-scrollbar-thumb:hover { background: #484F58; }
+/* Header */
+body.dark .header { background: #161B22; border-bottom-color: #30363D; }
+/* Form controls */
+body.dark .form-control { background: #0D1117; border-color: #30363D; color: var(--text); }
+body.dark .form-control:focus { border-color: var(--primary); }
+/* Cards */
+body.dark .leave-card   { background: #161B22; }
+body.dark .employee-card { background: #161B22; }
+/* Calendar */
+body.dark .calendar-grid-header { background: #161B22; border-color: #30363D; }
+body.dark .calendar-grid { background: #30363D; }
+body.dark .calendar-cell { background: #161B22; }
+body.dark .calendar-cell:hover { background: #1C2128; }
+body.dark .calendar-cell.other-month { background: #0D1117; }
+body.dark .calendar-cell.weekend { background: #161B22; }
+body.dark .calendar-cell.today { background: rgba(79,70,229,.12); }
+body.dark .week-day-card { background: #161B22; border-color: #30363D; }
+body.dark .week-day-header { border-bottom-color: #30363D; }
+/* Modal */
+body.dark .modal { background: #161B22; }
+body.dark .modal-header { border-bottom-color: #30363D; }
+body.dark .modal-footer { border-top-color: #30363D; }
+/* Tabs / toggles */
+body.dark .tab-bar { background: #0D1117; }
+body.dark .tab-btn.active { background: #161B22; }
+body.dark .view-toggle { background: #0D1117; }
+body.dark .view-toggle-btn.active { background: #161B22; }
+/* Buttons */
+body.dark .status-badge.wfh { background: rgba(6,182,212,.15); color: #22D3EE; }
+body.dark .cell-count.w    { background: rgba(6,182,212,.15); color: #22D3EE; }
+body.dark .btn-outline { border-color: #30363D; color: var(--text); }
+body.dark .btn-outline:hover:not(:disabled) { background: #1C2128; }
+body.dark .btn-ghost:hover { background: #1C2128; color: var(--text); }
+/* Tables */
+body.dark th { background: #0D1117; border-bottom-color: #30363D; }
+body.dark td { border-bottom-color: #21262D; }
+body.dark tr:hover td { background: #1C2128; }
+/* Day detail header */
+body.dark .day-detail-header { background: #0D1117; }
+/* Employee detail item */
+body.dark .employee-detail-item { border-color: #30363D; }
+body.dark .employee-detail-item:hover { background: #1C2128; }
+/* Dark mode toggle icon button */
+.dark-mode-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.dark-mode-btn:hover { background: var(--bg); color: var(--text); }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SMALL MOBILE  ≤ 480px
