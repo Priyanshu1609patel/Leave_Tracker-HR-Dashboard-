@@ -82,7 +82,9 @@ app.get('/api/auth/me', auth, async (req, res) => {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 app.get('/api/dashboard', auth, async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const realToday = new Date().toISOString().split('T')[0];
+    const today     = req.query.date || realToday;   // use date filter if provided
+    const isToday   = today === realToday;
 
     // ── 1. Get all employees (never include admin) ───────────────────────────
     const { data: allEmployees } = await supabase.from('users')
@@ -90,53 +92,53 @@ app.get('/api/dashboard', auth, async (req, res) => {
     const totalEmployees = allEmployees.length;
     const empIds         = allEmployees.map(e => e.id);
 
-    // ── 2. Today's attendance — employees only ───────────────────────────────
+    // ── 2. Selected date attendance — employees only ─────────────────────────
     const { data: todayRaw } = await supabase.from('attendance')
       .select('*, users(name, avatar_color, department)')
       .eq('date', today).in('user_id', empIds);
     const todayRecords = flat(todayRaw);
 
-    // ── 3. Clockify live — who is actively tracking right now ────────────────
+    // ── 3. Clockify live — only meaningful for today ──────────────────────────
     const clockifyActiveIds = new Set();
-    try {
-      const { data: config } = await supabase.from('clockify_config').select('*').limit(1).maybeSingle();
-      if (config?.api_key && config.api_key !== '' && config?.workspace_id) {
-        await Promise.all(allEmployees.filter(e => e.clockify_user_id).map(async emp => {
-          try {
-            const resp = await axios.get(
-              `https://api.clockify.me/api/v1/workspaces/${config.workspace_id}/user/${emp.clockify_user_id}/time-entries`,
-              { headers: { 'X-Api-Key': config.api_key }, params: { 'in-progress': true, 'page-size': 1 } }
-            );
-            if ((resp.data || []).some(e => !e.timeInterval?.end)) clockifyActiveIds.add(emp.id);
-          } catch { /* individual failure is ok */ }
-        }));
-      }
-    } catch { /* Clockify unavailable — degrade gracefully */ }
+    if (isToday) {
+      try {
+        const { data: config } = await supabase.from('clockify_config').select('*').limit(1).maybeSingle();
+        if (config?.api_key && config.api_key !== '' && config?.workspace_id) {
+          await Promise.all(allEmployees.filter(e => e.clockify_user_id).map(async emp => {
+            try {
+              const resp = await axios.get(
+                `https://api.clockify.me/api/v1/workspaces/${config.workspace_id}/user/${emp.clockify_user_id}/time-entries`,
+                { headers: { 'X-Api-Key': config.api_key }, params: { 'in-progress': true, 'page-size': 1 } }
+              );
+              if ((resp.data || []).some(e => !e.timeInterval?.end)) clockifyActiveIds.add(emp.id);
+            } catch { /* individual failure is ok */ }
+          }));
+        }
+      } catch { /* Clockify unavailable — degrade gracefully */ }
+    }
 
     // ── 4. Calculate stats ────────────────────────────────────────────────────
-    const onLeaveIds   = new Set(todayRecords.filter(r => r.status === 'on_leave').map(r => r.user_id));
+    const onLeaveIds    = new Set(todayRecords.filter(r => r.status === 'on_leave').map(r => r.user_id));
     const onLeaveToday  = onLeaveIds.size;
-    // Present = everyone not on full leave (same logic as calendar)
     const presentToday  = Math.max(0, totalEmployees - onLeaveToday);
-    // On Clockify = employees with active timer who are not on leave
-    const onClockify    = [...clockifyActiveIds].filter(id => !onLeaveIds.has(id)).length;
-    // Not On Clockify = present but no Clockify timer running
-    const notOnClockify = Math.max(0, presentToday - onClockify);
+    const onClockify    = isToday ? [...clockifyActiveIds].filter(id => !onLeaveIds.has(id)).length : null;
+    const notOnClockify = isToday ? Math.max(0, presentToday - onClockify) : null;
     const lateToday      = todayRecords.filter(r => r.is_late).length;
     const earlyExitToday = todayRecords.filter(r => r.is_early_exit).length;
     const halfDayToday   = todayRecords.filter(r => r.status === 'half_day').length;
     const wfhToday       = todayRecords.filter(r => r.status === 'wfh').length;
 
-    // ── 5. Recent activity — employees with actual records today ──────────────
+    // ── 5. Activity for selected date ─────────────────────────────────────────
     const activityMap = new Map();
     for (const r of todayRecords) {
       activityMap.set(r.user_id, { ...r, clockify_live: clockifyActiveIds.has(r.user_id) });
     }
-    // Add Clockify-only employees (no system record yet, not on leave)
-    for (const id of clockifyActiveIds) {
-      if (!activityMap.has(id) && !onLeaveIds.has(id)) {
-        const emp = allEmployees.find(e => e.id === id);
-        if (emp) activityMap.set(id, { user_id: emp.id, name: emp.name, avatar_color: emp.avatar_color, department: emp.department, status: 'present', check_in: null, clockify_live: true });
+    if (isToday) {
+      for (const id of clockifyActiveIds) {
+        if (!activityMap.has(id) && !onLeaveIds.has(id)) {
+          const emp = allEmployees.find(e => e.id === id);
+          if (emp) activityMap.set(id, { user_id: emp.id, name: emp.name, avatar_color: emp.avatar_color, department: emp.department, status: 'present', check_in: null, clockify_live: true });
+        }
       }
     }
     const recentActivity = [...activityMap.values()].slice(0, 15);
@@ -161,7 +163,7 @@ app.get('/api/dashboard', auth, async (req, res) => {
     const { data: myToday } = await supabase.from('attendance')
       .select('*').eq('user_id', req.user.id).eq('date', today).maybeSingle();
 
-    res.json({ totalEmployees, presentToday, onLeaveToday, onClockify, notOnClockify, lateToday, earlyExitToday, halfDayToday, wfhToday, pendingLeaves, recentActivity, pendingLeaveList, myToday, today });
+    res.json({ totalEmployees, presentToday, onLeaveToday, onClockify, notOnClockify, lateToday, earlyExitToday, halfDayToday, wfhToday, pendingLeaves, recentActivity, pendingLeaveList, myToday, today, isToday });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

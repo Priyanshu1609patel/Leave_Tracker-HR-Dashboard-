@@ -29,9 +29,10 @@ let state = {
   todayRecord:   null,
   timer:         null,
   leavesTab:        'all',  // 'all' | 'mine' | 'wfh' | 'late_early' (admin)
-  profileEmp:       null,
-  lateEarlyRecords: [],
-  leavesFilterDate: null,   // null = no filter; for late_early defaults to today
+  profileEmp:        null,
+  lateEarlyRecords:  [],
+  leavesFilterDate:  null,   // null = no filter; for late_early defaults to today
+  dashboardDate:     null,   // null = today; 'YYYY-MM-DD' = filter date
 };
 
 let leaveFormCount       = 0;
@@ -449,13 +450,13 @@ async function doCheckOut() {
 // DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════════
 async function loadDashboard() {
-  setHeaderTitle('Dashboard', 'Overview of today\'s attendance');
+  setHeaderTitle('Dashboard', 'Overview of attendance');
   const content = document.getElementById('content');
   content.innerHTML = `<div class="loading"><div class="spinner"></div> Loading…</div>`;
   try {
-    // Clean orphaned attendance records on every dashboard load for real-time accuracy
     await apiPost('/attendance/cleanup-orphaned', {}).catch(() => {});
-    const data = await apiGet('/dashboard');
+    const qs = state.dashboardDate ? { date: state.dashboardDate } : {};
+    const data = await apiGet('/dashboard', qs);
     state.dashboard = data;
     content.innerHTML = renderDashboard(data);
     bindDashboard();
@@ -463,18 +464,26 @@ async function loadDashboard() {
     content.innerHTML = `<div class="empty-state"><p>Failed to load dashboard: ${err.message}</p></div>`;
   }
 }
+function setDashboardDate(val) {
+  state.dashboardDate = val || null;
+  loadDashboard();
+}
 function renderDashboard(d) {
-  const isAdmin = state.user.role === 'admin';
+  const isAdmin  = state.user.role === 'admin';
+  const isToday  = d.isToday;
+  const suffix   = isToday ? 'Today' : 'on Date';
   const statCards = [
-    { label: 'Total Employees', value: d.totalEmployees, icon: '👥', cls: 'primary' },
-    { label: 'Present Today',   value: d.presentToday,   icon: '✅', cls: 'success', hint: 'Total employees minus on leave' },
-    { label: 'On Leave',        value: d.onLeaveToday,   icon: '🌴', cls: 'warning' },
-    { label: 'WFH Today',       value: d.wfhToday,       icon: '🏠', cls: 'info'    },
-    { label: 'On Clockify',     value: d.onClockify,     icon: '⏱', cls: 'success'  },
-    { label: 'Not On Clockify', value: d.notOnClockify,  icon: '🕐', cls: 'danger'  },
-    { label: 'Late Entries',    value: d.lateToday,      icon: '⏰', cls: 'orange'   },
-    { label: 'Early Exits',     value: d.earlyExitToday, icon: '◀',  cls: 'purple'  },
-    { label: 'Half Days',       value: d.halfDayToday,   icon: '🌓', cls: 'info'    },
+    { label: 'Total Employees',     value: d.totalEmployees, icon: '👥', cls: 'primary' },
+    { label: `Present ${suffix}`,   value: d.presentToday,   icon: '✅', cls: 'success', hint: 'Total employees minus on leave' },
+    { label: 'On Leave',            value: d.onLeaveToday,   icon: '🌴', cls: 'warning' },
+    { label: `WFH ${suffix}`,       value: d.wfhToday,       icon: '🏠', cls: 'info'    },
+    ...(isToday ? [
+      { label: 'On Clockify',     value: d.onClockify,    icon: '⏱', cls: 'success' },
+      { label: 'Not On Clockify', value: d.notOnClockify, icon: '🕐', cls: 'danger'  },
+    ] : []),
+    { label: 'Late Entries',        value: d.lateToday,      icon: '⏰', cls: 'orange'  },
+    { label: 'Early Exits',         value: d.earlyExitToday, icon: '◀',  cls: 'purple'  },
+    { label: 'Half Days',           value: d.halfDayToday,   icon: '🌓', cls: 'info'    },
     ...(isAdmin ? [{ label: 'Pending Leaves', value: d.pendingLeaves, icon: '📋', cls: 'info' }] : []),
   ];
 
@@ -521,12 +530,25 @@ function renderDashboard(d) {
           </div>
         </div>`).join('');
 
+  const displayDate = new Date((d.today || new Date().toISOString().split('T')[0]) + 'T12:00:00')
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
   return `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <div style="font-size:.95rem;font-weight:600;color:var(--text-muted)">${isToday ? 'Showing: Today' : `Showing: ${displayDate}`}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="date" class="form-control" style="width:auto;padding:6px 10px;font-size:.85rem"
+          value="${state.dashboardDate || ''}"
+          max="${new Date().toISOString().split('T')[0]}"
+          onchange="setDashboardDate(this.value)" />
+        ${!isToday ? `<button class="btn btn-outline btn-sm" onclick="setDashboardDate('')">Today</button>` : ''}
+      </div>
+    </div>
     <div class="stats-grid">
       ${statCards.map(c => `
         <div class="stat-card ${c.cls}" title="${c.hint || ''}">
           <div class="stat-icon">${c.icon}</div>
-          <div class="stat-value">${c.value}</div>
+          <div class="stat-value">${c.value ?? '—'}</div>
           <div class="stat-label">${c.label}</div>
           ${c.hint ? `<div style="font-size:.65rem;color:var(--text-muted);margin-top:2px">${c.hint}</div>` : ''}
         </div>`).join('')}
@@ -535,8 +557,8 @@ function renderDashboard(d) {
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Today's Attendance</div>
-            <div class="card-subtitle">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+            <div class="card-title">${isToday ? "Today's" : ''} Attendance</div>
+            <div class="card-subtitle">${displayDate}</div>
           </div>
           <button class="btn btn-outline btn-sm" onclick="navigate('calendar')">${I('calendar')} Full Calendar</button>
         </div>
@@ -1848,12 +1870,17 @@ async function renderEmployeeProfile(year, month) {
       apiGet('/leaves', { userId: emp.id, year, month }),
     ]);
 
-    const workingDays  = countWorkingDays(year, month);
+    // Cap stats at today — don't count future dates in an incomplete month
+    const todayStr   = new Date().toISOString().split('T')[0];
+    const monthEnd   = `${year}-${String(month).padStart(2,'0')}-${new Date(year, month, 0).getDate()}`;
+    const effectiveEnd = todayStr < monthEnd ? todayStr : monthEnd;
+
+    const workingDays  = countWorkingDays(year, month, effectiveEnd);
     // Use approved leaves as source of truth for leave-based stats
     const approvedLeaves = leaves.filter(l => l.status === 'approved');
-    const onLeaveCount = approvedLeaves.filter(l => l.leave_time === 'full').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
-    const halfDayCount = approvedLeaves.filter(l => l.leave_time === 'half').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
-    const wfhCount     = approvedLeaves.filter(l => l.leave_time === 'wfh').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month), 0);
+    const onLeaveCount = approvedLeaves.filter(l => l.leave_time === 'full').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month, effectiveEnd), 0);
+    const halfDayCount = approvedLeaves.filter(l => l.leave_time === 'half').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month, effectiveEnd), 0);
+    const wfhCount     = approvedLeaves.filter(l => l.leave_time === 'wfh').reduce((s, l) => s + countLeaveDaysInMonth(l, year, month, effectiveEnd), 0);
     const lateCount    = attendance.filter(r => r.is_late).length;
     const presentCount = Math.max(0, workingDays - onLeaveCount);
     const monthValue   = `${year}-${String(month).padStart(2,'0')}`;
@@ -1909,20 +1936,23 @@ async function renderEmployeeProfile(year, month) {
   }
 }
 
-function countWorkingDays(year, month) {
+function countWorkingDays(year, month, maxDate) {
   let count = 0;
   const days = new Date(year, month, 0).getDate();
+  const cap  = maxDate ? new Date(maxDate + 'T23:59:59') : null;
   for (let d = 1; d <= days; d++) {
-    const dow = new Date(year, month - 1, d).getDay();
+    const date = new Date(year, month - 1, d);
+    if (cap && date > cap) break;
+    const dow = date.getDay();
     if (dow !== 0 && dow !== 6) count++;
   }
   return count;
 }
 
-// Count working days (Mon–Fri) a leave covers within the given year/month
-function countLeaveDaysInMonth(leave, year, month) {
+// Count working days (Mon–Fri) a leave covers within the given year/month, capped at maxDate
+function countLeaveDaysInMonth(leave, year, month, maxDate) {
   const monthStart = new Date(year, month - 1, 1);
-  const monthEnd   = new Date(year, month, 0);
+  const monthEnd   = maxDate ? new Date(maxDate + 'T23:59:59') : new Date(year, month, 0);
   const start = new Date(Math.max(new Date(leave.start_date + 'T12:00:00'), monthStart));
   const end   = new Date(Math.min(new Date(leave.end_date   + 'T12:00:00'), monthEnd));
   let count = 0;
@@ -2294,6 +2324,7 @@ async function init() {
 window.doCheckIn          = doCheckIn;
 window.doCheckOut         = doCheckOut;
 window.navigate           = navigate;
+window.setDashboardDate   = setDashboardDate;
 window.logout             = logout;
 window.closeModal         = closeModal;
 window.openDayModal       = openDayModal;
