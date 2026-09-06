@@ -122,6 +122,45 @@ router.put('/shift/:shiftId', auth, hasPermission('settings', 'manage'), async (
 
     if (error) throw new Error(error.message);
     res.json(data);
+
+    // Auto-reprocess last 90 days of biometric attendance for this shift
+    // when hours thresholds change — fire-and-forget, does not block response.
+    const newFull = updates.full_day_hours;
+    const newHalf = updates.half_day_hours;
+    if (newFull != null || newHalf != null) {
+      setImmediate(async () => {
+        try {
+          // Fetch final effective thresholds (use saved row values as source of truth)
+          const { rows: [saved] } = await pool.query(
+            `SELECT full_day_hours, half_day_hours FROM shifts WHERE id = $1`, [shiftId]
+          );
+          const fullHrs = parseFloat(saved.full_day_hours ?? 8);
+          const halfHrs = parseFloat(saved.half_day_hours ?? 4.5);
+
+          const { rowCount } = await pool.query(
+            `UPDATE attendance a
+             SET status = CASE
+               WHEN a.work_hours >= $1 THEN 'present'
+               WHEN a.work_hours >= $2 THEN 'early_leave'
+               ELSE 'half_day'
+             END
+             FROM shift_assignments sa
+             WHERE a.user_id        = sa.user_id
+               AND a.date           = sa.date
+               AND sa.shift_id      = $3
+               AND a.organization_id = $4
+               AND a.source         = 'biometric'
+               AND a.date          >= CURRENT_DATE - INTERVAL '90 days'
+               AND a.work_hours    IS NOT NULL
+               AND a.status NOT IN ('on_leave', 'wfh', 'half_day_leave')`,
+            [fullHrs, halfHrs, shiftId, oId]
+          );
+          console.log(`[settings] shift ${shiftId} threshold change → reprocessed ${rowCount} attendance rows`);
+        } catch (e) {
+          console.error('[settings] attendance reprocess after shift save failed:', e.message);
+        }
+      });
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
