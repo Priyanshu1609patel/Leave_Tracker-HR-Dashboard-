@@ -646,11 +646,28 @@ router.get('/', auth, async (req, res) => {
     const { data, error } = await query;
     if (error) throw new Error(error.message);
 
-    res.json((data || []).map(l => ({
+    const result = (data || []).map(l => ({
       ...l, ...l.users,
       approver_name: l.approver?.name,
       users: undefined, approver: undefined,
-    })));
+    }));
+
+    // Enrich pending_approval leaves with current_level_role_type so the
+    // frontend can hide the Approve button for levels the caller can't act on.
+    if (isAdminRole(req.user.role)) {
+      try {
+        const wf = await engine.getOrgWorkflow(orgId(req));
+        const levelMap = {};
+        for (const lvl of wf.levels) levelMap[Number(lvl.level_number)] = lvl.role_type;
+        for (const l of result) {
+          if (l.status === 'pending_approval' && l.current_level != null) {
+            l.current_level_role_type = levelMap[Number(l.current_level)] || null;
+          }
+        }
+      } catch (_) { /* workflow tables not yet migrated — skip */ }
+    }
+
+    res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

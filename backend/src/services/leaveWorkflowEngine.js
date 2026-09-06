@@ -17,8 +17,8 @@ const { pool } = require('../config/db');
 
 // ── Default workflow created for every new organisation ───────────────────────
 const DEFAULT_WORKFLOW_LEVELS = [
-  { level_number: 1, role_type: 'reporting_manager', level_label: 'Reporting Manager', is_required: false },
-  { level_number: 2, role_type: 'hr_admin',          level_label: 'HR Admin',          is_required: true  },
+  { level_number: 1, role_type: 'hr_admin',   level_label: 'HR Admin',   is_required: true },
+  { level_number: 2, role_type: 'root_admin', level_label: 'Root Admin', is_required: true },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

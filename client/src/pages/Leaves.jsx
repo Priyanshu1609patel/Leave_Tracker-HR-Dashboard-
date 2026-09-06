@@ -352,6 +352,17 @@ const STATUS_CARD = {
 function LeaveCard({ leave: l, isAdmin, user, onApprove, onReject, onRevert, onCancel, onEdit, onDelete }) {
   const sc = STATUS_CARD[l.status] || {};
   const isRootAdmin = user?.role === 'root_admin';
+
+  // For new-workflow leaves: can the current user approve at this stage?
+  const canApproveNow = (() => {
+    if (l.status !== 'pending_approval') return false;
+    const rt = l.current_level_role_type;
+    if (!rt) return isAdmin; // no enrichment yet — fall back to any admin
+    if (rt === 'root_admin') return isRootAdmin;
+    if (rt === 'hr_admin') return isAdmin; // admin OR root_admin
+    // person-based (reporting_manager, department_head, specific_user)
+    return Number(l.current_approver_id) === Number(user?.id);
+  })();
   return (
     <div className={`card px-4 py-3.5 flex items-start gap-3.5 hover:border-[#3525cd] hover:shadow-card-hover hover:translate-x-0.5 transition-all duration-150 ${sc.border || ''} ${sc.bg || ''}`}>
       <Avatar name={l.name} color={l.avatar_color} size={36} />
@@ -389,12 +400,17 @@ function LeaveCard({ leave: l, isAdmin, user, onApprove, onReject, onRevert, onC
               <button className="btn btn-danger btn-sm text-xs"  onClick={() => onReject(l.id)}><X size={12} /> Reject</button>
             </>
           )}
-          {/* New workflow: pending_approval — admin can approve/reject at current level */}
-          {isAdmin && l.status === 'pending_approval' && (
+          {/* New workflow: pending_approval — show actions only when user can approve this level */}
+          {isAdmin && l.status === 'pending_approval' && canApproveNow && (
             <>
               <button className="btn btn-success btn-sm text-xs" onClick={() => onApprove(l.id)}><CheckCircle size={12} /> Approve</button>
               <button className="btn btn-danger btn-sm text-xs"  onClick={() => onReject(l.id)}><X size={12} /> Reject</button>
             </>
+          )}
+          {isAdmin && l.status === 'pending_approval' && !canApproveNow && l.current_level_role_type === 'root_admin' && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-lg">
+              Awaiting Root Admin Decision
+            </span>
           )}
           {/* Legacy-flow: waiting for dept head — show info, no action for admins */}
           {isAdmin && l.status === 'pending_dept' && (
