@@ -14,6 +14,7 @@ const {
   GenerationError,
 } = require('../../services/payrollGenerationService');
 const { triggerManual } = require('../../services/payrollScheduler');
+const { sendPayslipsBatch } = require('../../services/payrollEmailService');
 
 // ── ROUTE: POST /payroll/calculate-preview ────────────────────────────────────
 // Runs the payroll engine for one employee/period. No writes. Returns the full
@@ -1463,6 +1464,38 @@ router.post('/runs/:id/approve', auth, hasPermission('payroll', 'approve'), asyn
       action: 'payroll_approved', entityType: 'payroll_run', entityId: runId, ip: req.ip });
 
     res.json(updated[0]);
+
+    // Fire payslip emails if auto-email is enabled — fire-and-forget after response
+    setImmediate(async () => {
+      try {
+        const { rows: [ps] } = await pool.query(
+          `SELECT payslip_auto_email FROM payroll_settings WHERE organization_id = $1`,
+          [oId]
+        );
+        if (!ps?.payslip_auto_email) return;
+
+        // Guard: don't re-send if already emailed for this run
+        const { rows: already } = await pool.query(
+          `SELECT 1 FROM payroll_email_log WHERE payroll_run_id = $1 AND organization_id = $2 AND status = 'sent' LIMIT 1`,
+          [runId, oId]
+        );
+        if (already.length) return;
+
+        // Publish all payslips in this run (generated → published)
+        const { rows: runRow } = await pool.query(
+          `SELECT month, year FROM payroll_runs WHERE id = $1`, [runId]
+        );
+        await pool.query(
+          `UPDATE payslips SET status = 'published'
+           WHERE payroll_run_id = $1 AND organization_id = $2 AND status = 'generated'`,
+          [runId, oId]
+        );
+
+        await sendPayslipsBatch({ organizationId: oId, runId, month: runRow[0].month, year: runRow[0].year });
+      } catch (e) {
+        console.error('[payroll approve] auto-email failed:', e.message);
+      }
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
