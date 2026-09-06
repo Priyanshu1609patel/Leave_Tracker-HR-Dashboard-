@@ -71,7 +71,7 @@ function logApprovalAction({ leaveId, oId, actorId, actorName, action, fromStatu
     notes:       notes      || null,
   };
   if (level != null) row.level = level;
-  return db.from('leave_approval_log').insert(row).then(() => {});
+  return db.from('leave_approval_log').insert(row).then(() => {}).catch(e => console.error('[leave_approval_log] insert failed:', e.message));
 }
 
 function notify(userId, title, message, oId) {
